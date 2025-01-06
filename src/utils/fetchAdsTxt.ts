@@ -83,7 +83,7 @@ export const fetchAdsTxt = async (domain: string): Promise<FetchAdsTxtResult> =>
       }
 
       // Check if the subdomain is valid
-      if (trimmedLine.startsWith('subdomain=')) {
+      if (trimmedLine.toLowerCase().startsWith('subdomain=')) {
         const subdomain = trimmedLine.split('=')[1].trim();
         if (subdomain === domain) {
           isValidSubdmain = true;
@@ -91,18 +91,9 @@ export const fetchAdsTxt = async (domain: string): Promise<FetchAdsTxtResult> =>
         return;
       }
 
-      // Skip the contact field
-      if (trimmedLine.toLowerCase().startsWith('contact=')) {
-        return;
-      }
-
-      // Skip the managerdomain field
-      if (trimmedLine.toLowerCase().startsWith('managerdomain=')) {
-        return;
-      }
-
-      // Skip the ownerdomain field
-      if (trimmedLine.toLowerCase().startsWith('ownerdomain=')) {
+      // Skip fields that are not checked
+      const skipFields = ['contact=', 'inventorypartnerdomain=', 'managerdomain=', 'ownerdomain='];
+      if (skipFields.some((field) => trimmedLine.toLowerCase().startsWith(field))) {
         return;
       }
 
@@ -164,7 +155,7 @@ export const fetchAdsTxt = async (domain: string): Promise<FetchAdsTxtResult> =>
 
       // Add valid entry
       const entry: AdsTxt = {
-        domain: domainField,
+        domain: domainField.toLowerCase(),
         publisherId,
         relationship: relationship as 'DIRECT' | 'RESELLER',
       };
