@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chrome Extension Skeleton",
+  "name": "AdFit checker",
   "version": "1.0",
-  "description": "Chrome Extension with Background, Content Script, and Side Panel",
+  "description": "Check to see if the page is suitable for advertising.",
   "permissions": ["tabs", "sidePanel", "storage", "scripting"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
