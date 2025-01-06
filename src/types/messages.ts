@@ -8,11 +8,26 @@ export interface TabInfo {
   isScriptInjectionAllowed: boolean;
 }
 
+export interface PageInfo {
+  html: string;
+  imageDataURL: string;
+}
+
 // Message payloads type
 export interface MessagePayloads {
-  TEST_MESSAGE_FOR_SIDEPANEL: { message: string };
-  TEST_MESSAGE_FOR_CONTENTSCRIPT: { message: string };
-  // Add new message types here
+  CAPTURE_TAB: void;
+  CAPTURE_TAB_RESULT: {
+    success: boolean;
+    error?: string;
+    imageDataUrl?: string;
+    url: string | null;
+  };
+  SCRAPE_TAB: void;
+  SCRAPE_TAB_RESULT: {
+    success: boolean;
+    error?: string;
+    pageInfo?: PageInfo;
+  };
 }
 
 // Base message structure
