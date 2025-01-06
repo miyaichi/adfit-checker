@@ -194,7 +194,47 @@ class BackgroundService {
     //
     // When replying to a message, use this.sendMessage instead of ConnectionManager.sendMessage
     // to keep the flow of messages consistent and avoid port disconnection issues.
+    switch (message.type) {
+      case 'CAPTURE_TAB':
+        this.handleCaptureTab(port, message.source);
+        break;
+      default:
+        this.logger.warn('Unhandled message type:', message.type);
+    }
   };
+
+  // Capture the active tab and send the image data to the sidepanel
+  private async handleCaptureTab(port: chrome.runtime.Port, source: Context): Promise<void> {
+    this.logger.info('Received CAPTURE_TAB message');
+    try {
+      if (!this.activeTabInfo) {
+        throw new Error('No active tab found');
+      }
+
+      const windowId = this.activeTabInfo.windowId;
+      const imageDataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+        format: 'png',
+        quality: 100,
+      });
+
+      this.logger.info('Tab captured successfully');
+      this.sendMessage(source, port, {
+        type: 'CAPTURE_TAB_RESULT',
+        payload: { success: true, imageDataUrl, url: this.activeTabInfo.url ?? null },
+      });
+    } catch (error) {
+      this.logger.info('Failed to capture tab:', error);
+      this.sendMessage(source, port, {
+        type: 'CAPTURE_TAB_RESULT',
+        payload: {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          imageDataUrl: undefined,
+          url: null,
+        },
+      });
+    }
+  }
 }
 
 // Initialize the background service
