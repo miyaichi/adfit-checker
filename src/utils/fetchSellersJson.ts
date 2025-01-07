@@ -43,7 +43,13 @@ export const fetchSellersJson = async (
 ): Promise<FetchSellersJsonResult> => {
   const { timeout = 5000, retries = 2, retryDelay = 1000 } = options;
 
-  const url = `https://${domain}/sellers.json`;
+  const url =
+    domain === 'google.com'
+      ? 'http://realtimebidding.google.com/sellers.json'
+      : domain === 'advertisng.com'
+        ? 'https://dragon-advertising.com/sellers.json'
+        : `https://${domain}/sellers.json`;
+
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {

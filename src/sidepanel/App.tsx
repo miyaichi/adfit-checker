@@ -100,7 +100,7 @@ export default function App() {
 
     const promises = domains.map(async (domain) => {
       const sellersJsonResult = await fetchSellersJson(domain, {
-        timeout: 2000,
+        timeout: 5000,
         retries: 1,
       });
       const adsTxtEntries = adsTxtData.filter((entry) => entry.domain === domain);
@@ -155,6 +155,10 @@ export default function App() {
   };
 
   const renderAdsTxt = () => {
+    if (analyzing) {
+      return <div className="p-4 text-center text-gray-500">Analyzing...</div>;
+    }
+
     if (!adsTxtData)
       return (
         <div className="p-4 text-center text-gray-500">
@@ -224,6 +228,10 @@ export default function App() {
   };
 
   const renderSellerAnalysis = () => {
+    if (analyzing) {
+      return <div className="p-4 text-center text-gray-500">Analyzing...</div>;
+    }
+
     if (!sellerAnalysis.length) {
       return (
         <div className="p-4 text-center text-gray-500">
@@ -235,24 +243,24 @@ export default function App() {
     return (
       <div className="space-y-2 ml-4">
         {sellerAnalysis.map((analysis, idx) => (
-          <div>
+          <div className="space-y-2">
             <span className="font-bold">{analysis.domain}</span>
 
             {analysis.sellersJson?.error ? (
               <div className="text-red-600 p-2 bg-red-50 rounded">{analysis.sellersJson.error}</div>
-            ) : (
-              <ul className="space-y-2">
+            ) : analysis.sellersJson?.data && analysis.sellersJson.data.length > 0 ?(
+              <ul>
                 {analysis.sellersJson?.data?.map((seller, sellerIdx) => (
                   <li key={sellerIdx}>
                     {seller.domain || seller.name || 'confidential'}
-                    {seller.seller_type && (
-                      <> - {seller.seller_type}</>
-                    )}
-                    - {seller.seller_id}
+                    {seller.seller_type && <> - {seller.seller_type}</>}- {seller.seller_id}
                   </li>
-                )) ?? <li>No sellers found</li>}
+                ))}
               </ul>
-            )}
+            ) : (
+              <div className="p-2 bg-gray-100 rounded">No sellers found</div>
+            )
+            }
           </div>
         ))}
       </div>
