@@ -209,6 +209,16 @@ const isWithinScope = (targetDomain: string, rootDomain: string): boolean => {
   return targetDomain === rootDomain || targetDomain.endsWith(`.${rootDomain}`);
 };
 
+const isValidDomain = (domain: string): boolean => {
+  const domainRegex = /^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
+  return domainRegex.test(domain);
+};
+
+/**
+ * Returns a list of unique domains from the AdsTxt records.
+ * @param adsTxtData - Array of AdsTxt records.
+ * @returns Array of unique domains.
+ */
 export const getUniqueDomains = (adsTxtData: AdsTxt[]): string[] => {
   const uniqueDomains = new Set<string>();
   adsTxtData.forEach((entry) => {
@@ -218,11 +228,11 @@ export const getUniqueDomains = (adsTxtData: AdsTxt[]): string[] => {
 };
 
 /**
- * Valid domain name format: example.com, sub.example.com
- * @param domain - The domain name to validate
- * @returns True if the domain is valid, false otherwise
+ * Filters AdsTxt records to include only those with a matching domain.
+ * @param adsTxtArray - Array of AdsTxt records.
+ * @param domain - The domain to match.
+ * @returns Array of AdsTxt records with matching domain.
  */
-function isValidDomain(domain: string): boolean {
-  const domainRegex = /^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
-  return domainRegex.test(domain);
-}
+export const filterAdsTxtByDomain = (adsTxtArray: AdsTxt[], domain: string): AdsTxt[] => {
+  return adsTxtArray.filter((record) => record.domain === domain);
+};

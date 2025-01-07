@@ -5,10 +5,20 @@ import 'react-tabs/style/react-tabs.css';
 import { BaseMessage, TabInfo } from '../types/messages';
 import { Context } from '../types/types';
 import { ConnectionManager } from '../utils/connectionManager';
-import { fetchAdsTxt, FetchAdsTxtResult, getUniqueDomains } from '../utils/fetchAdsTxt';
+import { AdsTxt, fetchAdsTxt, FetchAdsTxtResult, getUniqueDomains } from '../utils/fetchAdsTxt';
+import { fetchSellersJson, Seller } from '../utils/fetchSellersJson';
 import { Logger } from '../utils/logger';
 
 const logger = new Logger('sidepanel');
+
+interface SellerAnalysis {
+  domain: string;
+  sellersJson?: {
+    data: Seller[];
+    error?: string;
+  };
+  adsTxtEntries: AdsTxt[];
+}
 
 export default function App() {
   const [tabId, setTabId] = useState<number | null>(null);
@@ -18,6 +28,7 @@ export default function App() {
   const initialized = React.useRef(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [adsTxtData, setAdsTxtData] = useState<FetchAdsTxtResult | null>(null);
+  const [sellerAnalysis, setSellerAnalysis] = useState<SellerAnalysis[]>([]);
 
   useEffect(() => {
     if (initialized.current) {
@@ -84,6 +95,41 @@ export default function App() {
     }
   };
 
+  const analyzeSellersJson = async (domains: string[], adsTxtData: AdsTxt[]) => {
+    const analysis: SellerAnalysis[] = [];
+
+    const promises = domains.map(async (domain) => {
+      const sellersJsonResult = await fetchSellersJson(domain, {
+        timeout: 2000,
+        retries: 1,
+      });
+      const adsTxtEntries = adsTxtData.filter((entry) => entry.domain === domain);
+
+      return {
+        domain,
+        sellersJson: sellersJsonResult.data
+          ? {
+              data: sellersJsonResult.data.sellers.filter((seller) =>
+                adsTxtEntries.some((entry) => entry.publisherId === seller.seller_id)
+              ),
+              error: sellersJsonResult.error,
+            }
+          : { data: [], error: sellersJsonResult.error },
+        adsTxtEntries,
+      };
+    });
+
+    const results = await Promise.allSettled(promises);
+
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        analysis.push(result.value);
+      }
+    });
+
+    return analysis;
+  };
+
   const handleAnalyze = async () => {
     if (!tabInfo || !tabInfo.isScriptInjectionAllowed || analyzing) return;
     setAnalyzing(true);
@@ -97,6 +143,10 @@ export default function App() {
 
       const sellerDomains = getUniqueDomains(adsTxtResult.data);
       logger.info('Seller domains:', sellerDomains);
+
+      const analysis = await analyzeSellersJson(sellerDomains, adsTxtResult.data);
+      setSellerAnalysis(analysis);
+      logger.info('Seller analysis:', analysis);
     } catch (error) {
       logger.error('Analysis failed:', error);
     } finally {
@@ -173,6 +223,42 @@ export default function App() {
     );
   };
 
+  const renderSellerAnalysis = () => {
+    if (!sellerAnalysis.length) {
+      return (
+        <div className="p-4 text-center text-gray-500">
+          No seller analysis available. Click Analyze to fetch data.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2 ml-4">
+        {sellerAnalysis.map((analysis, idx) => (
+          <div>
+            <span className="font-bold">{analysis.domain}</span>
+
+            {analysis.sellersJson?.error ? (
+              <div className="text-red-600 p-2 bg-red-50 rounded">{analysis.sellersJson.error}</div>
+            ) : (
+              <ul className="space-y-2">
+                {analysis.sellersJson?.data?.map((seller, sellerIdx) => (
+                  <li key={sellerIdx}>
+                    {seller.domain || seller.name || 'confidential'}
+                    {seller.seller_type && (
+                      <> - {seller.seller_type}</>
+                    )}
+                    - {seller.seller_id}
+                  </li>
+                )) ?? <li>No sellers found</li>}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="p-4 space-y-4">
@@ -197,9 +283,11 @@ export default function App() {
           <Tabs>
             <TabList>
               <Tab>Ads.txt</Tab>
+              <Tab>Sellers</Tab>
             </TabList>
 
             <TabPanel>{renderAdsTxt()}</TabPanel>
+            <TabPanel>{renderSellerAnalysis()}</TabPanel>
           </Tabs>
         </div>
       </div>
