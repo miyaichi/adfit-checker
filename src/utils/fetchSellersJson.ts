@@ -46,7 +46,7 @@ export const fetchSellersJson = async (
   const url =
     domain === 'google.com'
       ? 'http://realtimebidding.google.com/sellers.json'
-      : domain === 'advertisng.com'
+      : domain === 'advertising.com'
         ? 'https://dragon-advertising.com/sellers.json'
         : `https://${domain}/sellers.json`;
 
