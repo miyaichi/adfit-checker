@@ -251,7 +251,7 @@ export default function App() {
             ) : analysis.sellersJson?.data && analysis.sellersJson.data.length > 0 ?(
               <ul>
                 {analysis.sellersJson?.data?.map((seller, sellerIdx) => (
-                  <li key={sellerIdx}>
+                  <li key={`${analysis.domain}-${sellerIdx}`}>
                     {seller.domain || seller.name || 'confidential'}
                     {seller.seller_type && <> - {seller.seller_type}</>}- {seller.seller_id}
                   </li>
