@@ -130,9 +130,19 @@ export default function App() {
     return analysis;
   };
 
+  const isValidEntry = (domain: string, publisherId: string): boolean => {
+    const sellerJson = sellerAnalysis.find((analysis) => analysis.domain === domain)?.sellersJson
+      ?.data;
+    if (!sellerJson) return false;
+    if (!sellerJson.some((seller) => seller.seller_id === publisherId)) return false;
+    return true;
+  };
+
   const handleAnalyze = async () => {
     if (!tabInfo || !tabInfo.isScriptInjectionAllowed || analyzing) return;
     setAnalyzing(true);
+    setAdsTxtData(null);
+    setSellerAnalysis([]);
 
     try {
       const domain = new URL(tabInfo.url).hostname;
@@ -185,7 +195,14 @@ export default function App() {
             <h3 className="text-lg font-bold">Direct ({directEntries.length})</h3>
             <ul>
               {directEntries.map((entry: { domain: string; publisherId: string }, index) => (
-                <li key={`direct-${index}`}>
+                <li
+                  key={`direct-${index}`}
+                  className={
+                    isValidEntry(entry.domain, entry.publisherId)
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }
+                >
                   {entry.domain} - {entry.publisherId}
                 </li>
               ))}
@@ -195,7 +212,14 @@ export default function App() {
             <h3 className="text-lg font-bold">Reseller ({resellerEntries.length})</h3>
             <ul>
               {resellerEntries.map((entry: { domain: string; publisherId: string }, index) => (
-                <li key={`reseller-${index}`}>
+                <li
+                  key={`reseller-${index}`}
+                  className={
+                    isValidEntry(entry.domain, entry.publisherId)
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }
+                >
                   {entry.domain} - {entry.publisherId}
                 </li>
               ))}
@@ -248,7 +272,7 @@ export default function App() {
 
             {analysis.sellersJson?.error ? (
               <div className="text-red-600 p-2 bg-red-50 rounded">{analysis.sellersJson.error}</div>
-            ) : analysis.sellersJson?.data && analysis.sellersJson.data.length > 0 ?(
+            ) : analysis.sellersJson?.data && analysis.sellersJson.data.length > 0 ? (
               <ul>
                 {analysis.sellersJson?.data?.map((seller, sellerIdx) => (
                   <li key={`${analysis.domain}-${sellerIdx}`}>
@@ -259,8 +283,7 @@ export default function App() {
               </ul>
             ) : (
               <div className="p-2 bg-gray-100 rounded">No sellers found</div>
-            )
-            }
+            )}
           </div>
         ))}
       </div>
@@ -272,6 +295,7 @@ export default function App() {
       <div className="p-4 space-y-4">
         {/* Header and Analyze Button */}
         <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
+
           <button
             onClick={handleAnalyze}
             disabled={!tabId || analyzing}
