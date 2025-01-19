@@ -3,8 +3,8 @@
   "name": "AdFit checker",
   "version": "1.0",
   "description": "Check to see if the page is suitable for advertising.",
-  "permissions": ["tabs", "sidePanel", "storage", "scripting"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["activeTab", "tabs", "sidePanel", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },

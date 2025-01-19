@@ -1,4 +1,4 @@
-import { Context } from './types';
+import { Context, PageInfo } from './types';
 
 // Tab information type
 export interface TabInfo {
@@ -6,11 +6,6 @@ export interface TabInfo {
   windowId: number;
   url: string;
   isScriptInjectionAllowed: boolean;
-}
-
-export interface PageInfo {
-  html: string;
-  imageDataURL: string;
 }
 
 // Message payloads type
@@ -22,12 +17,9 @@ export interface MessagePayloads {
     imageDataUrl?: string;
     url: string | null;
   };
-  SCRAPE_TAB: void;
-  SCRAPE_TAB_RESULT: {
-    success: boolean;
-    error?: string;
-    pageInfo?: PageInfo;
-  };
+  PAGE_INFO: void;
+  PAGE_INFO_RESULT: { pageInfo: PageInfo };
+  SCROLL_TO: { x: number; y: number };
 }
 
 // Base message structure

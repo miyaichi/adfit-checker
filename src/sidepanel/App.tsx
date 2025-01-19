@@ -1,34 +1,31 @@
-import _ from 'lodash';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Tab, TabList, TabPanel, Tabs } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
-import { BaseMessage, TabInfo } from '../types/messages';
-import { Context } from '../types/types';
+import { AdsTxtPanel } from '../components/AdsTxtPanel';
+import { SellersPanel } from '../components/SellersPanel';
+import { useAdsSellers } from '../hooks/useAdsSellers';
+import { useScreenCapture } from '../hooks/useScreenCapture';
+import { BaseMessage, MessagePayloads, TabInfo } from '../types/messages';
+import { Context, PageInfo } from '../types/types';
 import { ConnectionManager } from '../utils/connectionManager';
-import { AdsTxt, fetchAdsTxt, FetchAdsTxtResult, getUniqueDomains } from '../utils/fetchAdsTxt';
-import { fetchSellersJson, Seller } from '../utils/fetchSellersJson';
 import { Logger } from '../utils/logger';
 
 const logger = new Logger('sidepanel');
-
-interface SellerAnalysis {
-  domain: string;
-  sellersJson?: {
-    data: Seller[];
-    error?: string;
-  };
-  adsTxtEntries: AdsTxt[];
-}
 
 export default function App() {
   const [tabId, setTabId] = useState<number | null>(null);
   const [tabInfo, setTabInfo] = useState<TabInfo | null>(null);
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
   const [contentScriptContext, setContentScriptContext] = useState<Context>('undefined');
-  const initialized = React.useRef(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [adsTxtData, setAdsTxtData] = useState<FetchAdsTxtResult | null>(null);
-  const [sellerAnalysis, setSellerAnalysis] = useState<SellerAnalysis[]>([]);
+  const initialized = useRef(false);
+  const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
+
+  const { capturing, screenCapture, captureScreen, handleCaptureResult } = useScreenCapture(
+    connectionManager,
+    contentScriptContext
+  );
+
+  const { analyzing, adsTxtData, sellerAnalysis, analyze, isValidEntry } = useAdsSellers();
 
   useEffect(() => {
     if (initialized.current) {
@@ -80,214 +77,46 @@ export default function App() {
   useEffect(() => {
     // Update content script context
     if (tabId && tabInfo && tabInfo.isScriptInjectionAllowed) {
-      setContentScriptContext(tabId ? `content-${tabId}` : 'undefined');
+      const context: Context = `content-${tabId}`;
+      setContentScriptContext(context);
+
+      // Update content script context
+      connectionManager?.sendMessage(context, { type: 'PAGE_INFO', payload: undefined });
     }
   }, [tabId, tabInfo]);
 
   const handleMessage = (message: BaseMessage) => {
     logger.debug('Message received', { type: message.type });
 
-    // Implement other message handling here ...
     switch (message.type) {
+      case 'CAPTURE_TAB_RESULT': {
+        const payload = message.payload as MessagePayloads['CAPTURE_TAB_RESULT'];
+        handleCaptureResult(payload.success ? payload.imageDataUrl || '' : '');
+        break;
+      }
+      case 'PAGE_INFO_RESULT': {
+        const payload = message.payload as MessagePayloads['PAGE_INFO_RESULT'];
+        setPageInfo(payload.pageInfo);
+        break;
+      }
       default:
         logger.debug('Unknown message type:', message.type);
         break;
     }
   };
 
-  const analyzeSellersJson = async (domains: string[], adsTxtData: AdsTxt[]) => {
-    const analysis: SellerAnalysis[] = [];
-
-    const promises = domains.map(async (domain) => {
-      const sellersJsonResult = await fetchSellersJson(domain, {
-        timeout: 5000,
-        retries: 1,
-      });
-      const adsTxtEntries = adsTxtData.filter((entry) => entry.domain === domain);
-
-      return {
-        domain,
-        sellersJson: sellersJsonResult.data
-          ? {
-              data: sellersJsonResult.data.sellers.filter((seller) =>
-                adsTxtEntries.some((entry) => entry.publisherId === seller.seller_id)
-              ),
-              error: sellersJsonResult.error,
-            }
-          : { data: [], error: sellersJsonResult.error },
-        adsTxtEntries,
-      };
-    });
-
-    const results = await Promise.allSettled(promises);
-
-    results.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        analysis.push(result.value);
-      }
-    });
-
-    return analysis;
-  };
-
-  const isValidEntry = (domain: string, publisherId: string): boolean => {
-    const sellerJson = sellerAnalysis.find((analysis) => analysis.domain === domain)?.sellersJson
-      ?.data;
-    if (!sellerJson) return false;
-    if (!sellerJson.some((seller) => seller.seller_id === publisherId)) return false;
-    return true;
-  };
-
   const handleAnalyze = async () => {
     if (!tabInfo || !tabInfo.isScriptInjectionAllowed || analyzing) return;
-    setAnalyzing(true);
-    setAdsTxtData(null);
-    setSellerAnalysis([]);
 
     try {
-      const domain = new URL(tabInfo.url).hostname;
+      if (pageInfo) {
+        captureScreen(pageInfo);
+      }
 
-      // Fetch data to analyze
-      const [adsTxtResult] = await Promise.all([fetchAdsTxt(domain)]);
-      setAdsTxtData(adsTxtResult);
-
-      const sellerDomains = getUniqueDomains(adsTxtResult.data);
-      logger.info('Seller domains:', sellerDomains);
-
-      const analysis = await analyzeSellersJson(sellerDomains, adsTxtResult.data);
-      setSellerAnalysis(analysis);
-      logger.info('Seller analysis:', analysis);
+      await analyze(tabInfo.url);
     } catch (error) {
       logger.error('Analysis failed:', error);
-    } finally {
-      setAnalyzing(false);
     }
-  };
-
-  const renderAdsTxt = () => {
-    if (analyzing) {
-      return <div className="p-4 text-center text-gray-500">Analyzing...</div>;
-    }
-
-    if (!adsTxtData)
-      return (
-        <div className="p-4 text-center text-gray-500">
-          No data available. Click Analyze to fetch Ads.txt
-        </div>
-      );
-
-    const directEntries = _.orderBy(
-      adsTxtData.data.filter((entry) => entry.relationship === 'DIRECT'),
-      ['domain', 'publisherId'],
-      ['asc', 'asc']
-    );
-
-    const resellerEntries = _.orderBy(
-      adsTxtData.data.filter((entry) => entry.relationship === 'RESELLER'),
-      ['domain', 'publisherId'],
-      ['asc', 'asc']
-    );
-
-    return (
-      <div>
-        <div className="space-y-2 ml-4">
-          <div>
-            <h3 className="text-lg font-bold">Direct ({directEntries.length})</h3>
-            <ul>
-              {directEntries.map((entry: { domain: string; publisherId: string }, index) => (
-                <li
-                  key={`direct-${index}`}
-                  className={
-                    isValidEntry(entry.domain, entry.publisherId)
-                      ? 'text-green-600'
-                      : 'text-red-600'
-                  }
-                >
-                  {entry.domain} - {entry.publisherId}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h3 className="text-lg font-bold">Reseller ({resellerEntries.length})</h3>
-            <ul>
-              {resellerEntries.map((entry: { domain: string; publisherId: string }, index) => (
-                <li
-                  key={`reseller-${index}`}
-                  className={
-                    isValidEntry(entry.domain, entry.publisherId)
-                      ? 'text-green-600'
-                      : 'text-red-600'
-                  }
-                >
-                  {entry.domain} - {entry.publisherId}
-                </li>
-              ))}
-            </ul>
-          </div>
-          {adsTxtData && adsTxtData.errors && (
-            <div>
-              <h3 className="text-lg font-bold">Errors ({adsTxtData.errors.length})</h3>
-              <div className="space-y-2">
-                {adsTxtData.errors.map((error, index) => (
-                  <div key={index} className="p-3 bg-red-50 text-red-700 rounded-md">
-                    {error.line > 0 ? (
-                      <>
-                        <p className="font-medium">
-                          Line {error.line}: {error.message}
-                        </p>
-                        <p className="text-sm mt-1">Content: {error.content}</p>
-                      </>
-                    ) : (
-                      <p className="font-medium">{error.message}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderSellerAnalysis = () => {
-    if (analyzing) {
-      return <div className="p-4 text-center text-gray-500">Analyzing...</div>;
-    }
-
-    if (!sellerAnalysis.length) {
-      return (
-        <div className="p-4 text-center text-gray-500">
-          No seller analysis available. Click Analyze to fetch data.
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-2 ml-4">
-        {sellerAnalysis.map((analysis, idx) => (
-          <div className="space-y-2">
-            <span className="font-bold">{analysis.domain}</span>
-
-            {analysis.sellersJson?.error ? (
-              <div className="text-red-600 p-2 bg-red-50 rounded">{analysis.sellersJson.error}</div>
-            ) : analysis.sellersJson?.data && analysis.sellersJson.data.length > 0 ? (
-              <ul>
-                {analysis.sellersJson?.data?.map((seller, sellerIdx) => (
-                  <li key={`${analysis.domain}-${sellerIdx}`}>
-                    {seller.domain || seller.name || 'confidential'}
-                    {seller.seller_type && <> - {seller.seller_type}</>}- {seller.seller_id}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="p-2 bg-gray-100 rounded">No sellers found</div>
-            )}
-          </div>
-        ))}
-      </div>
-    );
   };
 
   return (
@@ -295,7 +124,6 @@ export default function App() {
       <div className="p-4 space-y-4">
         {/* Header and Analyze Button */}
         <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
-
           <button
             onClick={handleAnalyze}
             disabled={!tabId || analyzing}
@@ -316,10 +144,29 @@ export default function App() {
             <TabList>
               <Tab>Ads.txt</Tab>
               <Tab>Sellers</Tab>
+              <Tab>Capture</Tab>
             </TabList>
 
-            <TabPanel>{renderAdsTxt()}</TabPanel>
-            <TabPanel>{renderSellerAnalysis()}</TabPanel>
+            <TabPanel>
+              <AdsTxtPanel
+                analyzing={analyzing}
+                adsTxtData={adsTxtData}
+                isValidEntry={isValidEntry}
+              />
+            </TabPanel>
+            <TabPanel>
+              <SellersPanel analyzing={analyzing} sellerAnalysis={sellerAnalysis} />
+            </TabPanel>
+            <TabPanel>
+              {capturing && (
+                <div className="p-4 text-center text-gray-500">Capturing screen...</div>
+              )}
+              {screenCapture && (
+                <div className="p-4">
+                  <img src={screenCapture} alt="Screen capture" />
+                </div>
+              )}
+            </TabPanel>
           </Tabs>
         </div>
       </div>
